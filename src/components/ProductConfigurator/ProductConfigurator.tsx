@@ -208,6 +208,10 @@ export const ProductConfigurator: React.FC<ProductConfiguratorProps> = ({
 
     window.addEventListener("resize", handleResize);
     handleResize();
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -219,8 +223,7 @@ export const ProductConfigurator: React.FC<ProductConfiguratorProps> = ({
         if (!cancelled) {
           setValidation(result);
         }
-      } catch {
-      }
+      } catch {}
     };
 
     validate();
@@ -266,9 +269,15 @@ export const ProductConfigurator: React.FC<ProductConfiguratorProps> = ({
 
   useEffect(() => {
     if (showShareModal) {
-      const encoded = encodeConfigurationToUrl(currentConfig);
-      const url = `${window.location.origin}${window.location.pathname}?config=${encoded}`;
-      setShareUrl(url);
+      try {
+        const encoded = encodeConfigurationToUrl(currentConfig);
+        const url = `${window.location.origin}${window.location.pathname}?config=${encoded}`;
+        setShareUrl(url);
+      } catch (err) {
+        console.error(err);
+
+        setError("Share link not generated due to unsupported characters");
+      }
     }
   }, [showShareModal, currentConfig]);
 
@@ -297,24 +306,21 @@ export const ProductConfigurator: React.FC<ProductConfiguratorProps> = ({
         [optionId]: value,
       }));
 
-      const option = product.options.find((o) => o.id === optionId);
-      if (option) {
-        const dependentAddOns = product.addOns.filter(
-          (a) => a.dependsOn?.optionId === optionId,
-        );
+      const dependentAddOnIdsToRemove = product.addOns
+        .filter(
+          (addOn) =>
+            addOn.dependsOn?.optionId === optionId &&
+            value !== addOn.dependsOn.requiredValue,
+        )
+        .map((addOn) => addOn.id);
 
-        for (const addOn of dependentAddOns) {
-          if (addOn.dependsOn && value !== addOn.dependsOn.requiredValue) {
-            const index = selectedAddOns.indexOf(addOn.id);
-            if (index > -1) {
-              selectedAddOns.splice(index, 1);
-              setSelectedAddOns(selectedAddOns);
-            }
-          }
-        }
+      if (dependentAddOnIdsToRemove.length > 0) {
+        setSelectedAddOns((prev) =>
+          prev.filter((id) => !dependentAddOnIdsToRemove.includes(id)),
+        );
       }
     },
-    [product.options, product.addOns, selectedAddOns],
+    [product.addOns],
   );
 
   const handleAddOnToggle = useCallback(
@@ -407,8 +413,7 @@ export const ProductConfigurator: React.FC<ProductConfiguratorProps> = ({
   const handleCopyShareUrl = useCallback(() => {
     navigator.clipboard
       .writeText(shareUrl)
-      .then(() => {
-      })
+      .then(() => {})
       .catch(() => {
         setError(ERROR_CODES.UNKNOWN);
       });
@@ -919,9 +924,7 @@ export const ProductConfigurator: React.FC<ProductConfiguratorProps> = ({
             className={`price-display ${isPriceLoading ? "price-loading" : ""}`}
           >
             <div className="price-label">Total Price</div>
-            <div className="price-value">
-              {formattedTotal}
-            </div>
+            <div className="price-value">{formattedTotal}</div>
 
             {renderPriceBreakdown()}
 
